@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <base target="_top">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wholesale Portal | Svelte Ecosystem</title>
+    <link rel="icon" type="image/png" href="https://i.imgur.com/U4WPjmA.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f8fafc',
+                            100: '#f1f5f9',
+                            200: '#e2e8f0',
+                            300: '#cbd5e1',
+                            400: '#94a3b8',
+                            500: '#64748b',
+                            600: '#475569',
+                            700: '#334155',
+                            800: '#1e293b',
+                            900: '#0f172a',
+                            orange: '#FF3E00' // Svelte Orange
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            transition: background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        body { background-color: #f8fafc; }
+        .dark body { background: radial-gradient(circle at top left, #1e293b, #0f172a); background-attachment: fixed; }
+
+        .glass {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .dark .glass {
+            background: rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .dark ::-webkit-scrollbar-thumb { background: #334155; }
+
+        .loader {
+            border: 3px solid #e2e8f0;
+            border-top: 3px solid #FF3E00;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        .shimmer-bg {
+            background: linear-gradient(90deg, transparent, rgba(255, 62, 0, 0.05), transparent);
+            background-size: 200% 100%;
+            animation: shimmer 2s infinite linear;
+        }
+        @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+        .card-hover { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .card-hover:hover { transform: translateY(-4px); box-shadow: 0 12px 24px -8px rgba(0, 0, 0, 0.1); }
+        
+        pre {
+            scrollbar-width: thin;
+            scrollbar-color: #FF3E00 transparent;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+
+    <script type="text/babel">
+        const { useState, useEffect, useCallback, useMemo } = React;
+        const { createRoot } = ReactDOM;
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCYmxR2T0vKKJMMPC2BGHuvQ8DmHLQYDdA",
+            authDomain: "svelte-wholesale-pricing.firebaseapp.com",
+            projectId: "svelte-wholesale-pricing",
+            storageBucket: "svelte-wholesale-pricing.firebasestorage.app",
+            messagingSenderId: "963791225924",
+            appId: "1:963791225924:web:afa7fadeae6d9b13912811"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        const productsCollection = db.collection("products");
+
+        // Icons
+        const SunIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>;
+        const MoonIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>;
+        const DatabaseIcon = () => <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" /></svg>;
+        const CodeIcon = () => <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" /></svg>;
+        const KeyIcon = () => <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H5v-2H3v-2H1v-4a6 6 0 016-6h7a2 2 0 012 2z" /></svg>;
+        const EyeIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>;
+        const EyeOffIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18" /></svg>;
+        const CopyIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>;
+
+        function Header({ user, activeTab, setActiveTab, onLogout, theme, setTheme }) {
+            const navItems = [
+                { id: 'database', label: 'Inventory', icon: <DatabaseIcon /> },
+                { id: 'api_docs', label: 'Documentation', icon: <CodeIcon /> },
+                { id: 'api_key', label: 'API Access', icon: <KeyIcon /> },
+            ];
+
+            return (
+                <header className="glass sticky top-0 z-40 border-b border-brand-200/50 dark:border-brand-800/50">
+                    <div className="max-w-[1600px] mx-auto px-4 lg:px-8">
+                        <div className="flex items-center justify-between h-20">
+                            <div className="flex items-center space-x-4 lg:space-x-6">
+                                <img src="https://i.imgur.com/GQya5pg.png" alt="L&T Logo" className="h-10 lg:h-12 w-auto object-contain" />
+                                <div className="flex flex-col">
+                                    <h1 className="text-md lg:text-lg font-bold text-brand-900 dark:text-white leading-tight">Wholesale Portal</h1>
+                                    <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-brand-orange">Svelte Partnership</p>
+                                </div>
+                            </div>
+                            
+                            <nav className="hidden md:flex items-center space-x-1">
+                                {navItems.map(item => (
+                                    <button 
+                                        key={item.id}
+                                        onClick={() => setActiveTab(item.id)} 
+                                        className={`flex items-center px-4 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === item.id ? 'bg-brand-900 dark:bg-brand-orange text-white dark:text-brand-900 shadow-md' : 'text-brand-500 hover:bg-brand-100 dark:hover:bg-brand-800'}`}
+                                    >
+                                        {item.icon}
+                                        {item.label}
+                                    </button>
+                                ))}
+                            </nav>
+
+                            <div className="flex items-center space-x-3">
+                                <div className="hidden lg:flex flex-col items-end mr-2">
+                                    <span className="text-[10px] uppercase font-bold text-brand-orange tracking-tighter">Account</span>
+                                    <span className="text-xs font-bold text-brand-900 dark:text-brand-200">{user.email.split('@')[0]}</span>
+                                </div>
+                                <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="p-2 rounded-full border border-brand-200 dark:border-brand-800 text-brand-600 dark:text-brand-400 hover:bg-brand-100 dark:hover:bg-brand-800 transition-colors">
+                                    {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
+                                </button>
+                                <button onClick={onLogout} className="px-4 py-2 text-sm font-bold text-white bg-brand-900 dark:bg-brand-700 rounded-xl hover:opacity-90 transition-all">Logout</button>
+                            </div>
+                        </div>
+                    </div>
+                </header>
+            );
+        }
+
+        function MobileNav({ activeTab, setActiveTab }) {
+            const navItems = [
+                { id: 'database', label: 'Catalog', icon: <DatabaseIcon /> },
+                { id: 'api_docs', label: 'Docs', icon: <CodeIcon /> },
+                { id: 'api_key', label: 'API', icon: <KeyIcon /> },
+            ];
+            return (
+                <div className="md:hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-50 glass rounded-2xl shadow-2xl p-1.5 flex gap-1 border border-white/20">
+                    {navItems.map(item => (
+                        <button key={item.id} onClick={() => setActiveTab(item.id)} className={`px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest flex flex-col items-center gap-1 transition-all ${activeTab === item.id ? 'bg-brand-900 text-white' : 'text-brand-500'}`}>
+                            {React.isValidElement(item.icon) ? React.cloneElement(item.icon, { className: "h-5 w-5 mr-0" }) : item.icon}
+                            {item.label}
+                        </button>
+                    ))}
+                </div>
+            );
+        }
+
+        function App() {
+            const [user, setUser] = useState(null);
+            const [loading, setLoading] = useState(true);
+            const [activeTab, setActiveTab] = useState('database');
+            const [theme, setTheme] = useState('light');
+
+            useEffect(() => {
+                const unsubscribe = auth.onAuthStateChanged(user => {
+                    setUser(user);
+                    setLoading(false);
+                });
+                return () => unsubscribe();
+            }, []);
+            
+            useEffect(() => {
+                document.documentElement.classList.toggle('dark', theme === 'dark');
+            }, [theme]);
+
+            if (loading) return (
+                <div className="flex items-center justify-center min-h-screen bg-brand-50 dark:bg-brand-900">
+                    <div className="loader"></div>
+                </div>
+            );
+
+            return (
+                <div className="min-h-screen pb-24 md:pb-0">
+                    {user ? (
+                        <>
+                            <Header user={user} activeTab={activeTab} setActiveTab={setActiveTab} onLogout={() => auth.signOut()} theme={theme} setTheme={setTheme} />
+                            <main className="max-w-[1600px] mx-auto py-6 lg:py-8 px-4 lg:px-8">
+                                {activeTab === 'database' && <ProductDatabase />}
+                                {activeTab === 'api_docs' && <ApiDocs />}
+                                {activeTab === 'api_key' && <ApiKeyManager user={user} />}
+                            </main>
+                            <MobileNav activeTab={activeTab} setActiveTab={setActiveTab} />
+                        </>
+                    ) : <AuthComponent />}
+                </div>
+            );
+        }
+
+        function AuthComponent() {
+            const [isLogin, setIsLogin] = useState(true);
+            const [email, setEmail] = useState('');
+            const [password, setPassword] = useState('');
+            const [error, setError] = useState('');
+            const [loading, setLoading] = useState(false);
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                setLoading(true);
+                setError('');
+                try {
+                    if (isLogin) {
+                        await auth.signInWithEmailAndPassword(email, password);
+                    } else {
+                        const invite = await db.collection('invites').doc(email).get();
+                        if (!invite.exists) throw new Error("Verification required. Contact support.");
+                        await auth.createUserWithEmailAndPassword(email, password);
+                    }
+                } catch (err) { setError(err.message); } finally { setLoading(false); }
+            };
+
+            return (
+                <div className="flex items-center justify-center min-h-screen bg-brand-50 dark:bg-brand-900 p-6">
+                    <div className="w-full max-w-md p-10 space-y-8 glass rounded-[2.5rem] shadow-2xl">
+                        <div className="text-center space-y-4">
+                            <img src="https://i.imgur.com/GQya5pg.png" alt="Logo" className="w-24 mx-auto"/>
+                            <div className="space-y-1">
+                                <h2 className="text-2xl font-black text-brand-900 dark:text-white uppercase tracking-tight">{isLogin ? 'Partner Sign In' : 'Join the Network'}</h2>
+                                <p className="text-brand-orange text-[10px] uppercase tracking-[0.3em] font-bold">Svelte Partnership</p>
+                            </div>
+                        </div>
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} required className="w-full p-4 rounded-2xl bg-brand-50 dark:bg-brand-800 border border-brand-200 dark:border-brand-700 dark:text-white outline-none focus:ring-2 focus:ring-brand-orange/30 transition-all text-sm" />
+                            <input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} required className="w-full p-4 rounded-2xl bg-brand-50 dark:bg-brand-800 border border-brand-200 dark:border-brand-700 dark:text-white outline-none focus:ring-2 focus:ring-brand-orange/30 transition-all text-sm" />
+                            {error && <p className="text-rose-500 text-[10px] text-center font-bold uppercase p-2">{error}</p>}
+                            <button type="submit" disabled={loading} className="w-full py-4 rounded-2xl bg-brand-900 dark:bg-brand-orange text-white dark:text-brand-900 font-black uppercase tracking-widest text-xs hover:shadow-xl transition-all disabled:opacity-50">
+                                {loading ? 'Authenticating...' : (isLogin ? 'Enter Portal' : 'Register')}
+                            </button>
+                        </form>
+                        <p className="text-center text-[11px] text-brand-500 uppercase tracking-widest">
+                            {isLogin ? "Need access?" : "Existing Partner?"}
+                            <button onClick={() => setIsLogin(!isLogin)} className="ml-2 font-black text-brand-900 dark:text-brand-orange underline underline-offset-4">{isLogin ? 'Sign Up' : 'Login'}</button>
+                        </p>
+                    </div>
+                </div>
+            );
+        }
+
+        const tagColorMap = {
+            'Special Pricing': 'bg-rose-500 text-white',
+            'New Arrival': 'bg-sky-500 text-white',
+            'Best Seller': 'bg-brand-orange text-white',
+            'Holiday Promo': 'bg-emerald-500 text-white'
+        };
+
+        function ProductDatabase() {
+            const [rawItems, setRawItems] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [error, setError] = useState('');
+            const [selectedItem, setSelectedItem] = useState(null);
+            
+            const [categoryMetadata, setCategoryMetadata] = useState(null);
+            const [brandsLoading, setBrandsLoading] = useState(true);
+            const [activeCategoryTab, setActiveCategoryTab] = useState('Shop All'); 
+            const [viewMode, setViewMode] = useState('inStock');
+            const [currentPage, setCurrentPage] = useState(1);
+            const ITEMS_PER_PAGE = 100;
+
+            const [activeFilters, setActiveFilters] = useState({
+                brand: 'All Brands',
+                search: { term: '', type: 'upc' },
+                tags: { 'Special Pricing': false, 'New Arrival': false, 'Best Seller': false, 'Holiday Promo': false }
+            });
+            const [sortBy, setSortBy] = useState('brand');
+            const [sortDirection, setSortDirection] = useState('asc');
+
+            const appId = "1:975989212115:web:5b088a0e647c12d9b2e526";
+
+            const baseVisibleCheck = (item) => (item.imageUrl && item.imageUrl.trim() !== '' && item.subCategory !== 'Tester' && item.askingPrice && Number(item.askingPrice) >= 15);
+            const isItemVisible = (item) => (baseVisibleCheck(item) && item.availableInventory > 0);
+            const isOOSVisible = (item) => (baseVisibleCheck(item) && (!item.availableInventory || item.availableInventory === 0));
+
+            useEffect(() => {
+                const fetchMetadata = async () => {
+                    setBrandsLoading(true);
+                    try {
+                        const metaDoc = await db.collection('artifacts').doc(appId).collection('public').doc('categoryInfo').get();
+                        if (metaDoc.exists) setCategoryMetadata(metaDoc.data().categories);
+                    } catch (err) { console.error(err); } finally { setBrandsLoading(false); }
+                };
+                fetchMetadata();
+            }, [appId]);
+
+            useEffect(() => {
+                const fetchSourceData = async () => {
+                    setLoading(true);
+                    setError('');
+                    try {
+                        let query = productsCollection;
+                        if (activeCategoryTab !== 'Shop All') {
+                            query = query.where('category', '==', activeCategoryTab);
+                        }
+                        const snapshot = await query.get();
+                        const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                        setRawItems(fetched);
+                        setCurrentPage(1);
+                    } catch (err) {
+                        setError("Failed to sync catalog manifest.");
+                        console.error(err);
+                    } finally {
+                        setLoading(false);
+                    }
+                };
+                fetchSourceData();
+            }, [activeCategoryTab]);
+
+            // 1. Intermediate Filter: View Mode (Stock vs OOS)
+            const itemsByViewMode = useMemo(() => {
+                return rawItems.filter(item => viewMode === 'inStock' ? isItemVisible(item) : isOOSVisible(item));
+            }, [rawItems, viewMode]);
+
+            // 2. Calculated: Displayed Brands (with fallback)
+            const displayedBrands = useMemo(() => {
+                // Try Metadata first (Optimization)
+                if (categoryMetadata) {
+                    const key = viewMode === 'inStock' ? 'inStockBrands' : 'outOfStockBrands';
+                    if (activeCategoryTab === 'Shop All') {
+                        const allBrands = new Set();
+                        Object.keys(categoryMetadata).forEach(cat => {
+                            (categoryMetadata[cat]?.[key] || []).forEach(b => allBrands.add(b));
+                        });
+                        if (allBrands.size > 0) return [...allBrands].sort();
+                    } else {
+                        const brands = categoryMetadata[activeCategoryTab]?.[key];
+                        if (brands && brands.length > 0) return brands.sort();
+                    }
+                }
+                
+                // Fallback: Calculate from loaded data (Robustness)
+                const uniqueBrands = new Set(itemsByViewMode.map(i => i.brand).filter(b => b && b.trim() !== ''));
+                return [...uniqueBrands].sort();
+            }, [categoryMetadata, activeCategoryTab, viewMode, itemsByViewMode]);
+
+            // 3. Final Filter: Apply User Selection
+            const processedItems = useMemo(() => {
+                let filtered = [...itemsByViewMode];
+                
+                if (activeFilters.brand !== 'All Brands') {
+                    filtered = filtered.filter(item => item.brand === activeFilters.brand);
+                }
+
+                const selectedTags = Object.entries(activeFilters.tags).filter(([, v]) => v).map(([k]) => k);
+                if (selectedTags.length > 0) {
+                    filtered = filtered.filter(item => Array.isArray(item.specialTag) && item.specialTag.some(t => selectedTags.includes(t)));
+                }
+
+                const term = activeFilters.search.term.trim().toLowerCase();
+                if (term) {
+                    const type = activeFilters.search.type;
+                    if (type === 'upc') {
+                        const searchTerms = term.split(',').map(x => x.trim()).filter(x => x);
+                        filtered = filtered.filter(item => {
+                            const itemUpc = String(item.upc || '').toLowerCase();
+                            return searchTerms.some(st => {
+                                const variations = [st, st.replace(/^0+/, ''), '0' + st, '00' + st];
+                                return variations.includes(itemUpc);
+                            });
+                        });
+                    } else if (type === 'itemName_lowercase') {
+                        filtered = filtered.filter(item => (item.itemName || '').toLowerCase().includes(term));
+                    } else {
+                        filtered = filtered.filter(item => String(item[type] || '').toLowerCase() === term);
+                    }
+                }
+
+                filtered.sort((a, b) => {
+                    let valA = a[sortBy] || '';
+                    let valB = b[sortBy] || '';
+                    if (typeof valA === 'string') valA = valA.toLowerCase();
+                    if (typeof valB === 'string') valB = valB.toLowerCase();
+                    if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+                    if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+                    return (a.sku || '').localeCompare(b.sku || '');
+                });
+                return filtered;
+            }, [itemsByViewMode, activeFilters, sortBy, sortDirection]);
+
+            const paginatedItems = useMemo(() => {
+                const start = (currentPage - 1) * ITEMS_PER_PAGE;
+                return processedItems.slice(start, start + ITEMS_PER_PAGE);
+            }, [processedItems, currentPage]);
+
+            const triggerCsvDownload = (data) => {
+                const headers = ["Image", "SKU", "UPC", "Asin", "Brand", "Item Name", "Size", "Type", "Stock", "MSRP", "Price"];
+                const rows = data.map(i => [i.imageUrl||'', i.sku||'', `="${i.upc||''}"`, i.asin||'', i.brand||'', i.itemName||'', i.size||'', i.type||'', i.availableInventory||0, i.msrp||'', i.askingPrice||0]);
+                const csv = [headers.join(','), ...rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(','))].join('\r\n');
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url; a.download = `wholesale_report.csv`; a.click();
+            };
+
+            return (
+                <div className="flex flex-col lg:flex-row gap-6">
+                    <aside className="lg:w-72 shrink-0">
+                        <FilterSidePanel brands={displayedBrands} isLoading={brandsLoading} activeFilters={activeFilters} onFilterChange={f => { setActiveFilters(p => ({...p, ...f})); setCurrentPage(1); }} />
+                    </aside>
+                    <div className="flex-grow min-w-0">
+                        <SearchControls 
+                            onSearch={(t, y) => setActiveFilters(p => ({...p, search: {term: t, type: y}}))} 
+                            onBulkSearch={u => setActiveFilters(p => ({...p, search: {term: u.join(','), type: 'upc'}}))}
+                            onBrowseAll={() => setActiveFilters({ brand: 'All Brands', search: { term: '', type: 'upc' }, tags: { 'Special Pricing': false, 'New Arrival': false, 'Best Seller': false, 'Holiday Promo': false } })} 
+                            sortBy={sortBy} 
+                            setSortBy={e => setSortBy(e.target.value)} 
+                            sortDirection={sortDirection} 
+                            onSortDirectionChange={() => setSortDirection(p => p==='asc'?'desc':'asc')} 
+                        />
+                        <div className="mb-6 flex flex-col md:flex-row justify-between items-center gap-4">
+                            <div className="flex p-1 bg-brand-100 dark:bg-brand-800 rounded-xl w-full md:w-auto overflow-x-auto filter-scrollbar">
+                                {['Shop All', 'Fragrance', 'Beauty', 'Gift Sets'].map(cat => (
+                                    <button key={cat} onClick={() => setActiveCategoryTab(cat)} className={`flex-grow md:flex-none px-5 py-2 text-xs font-bold rounded-lg transition-all whitespace-nowrap ${activeCategoryTab === cat ? 'bg-white dark:bg-brand-700 text-brand-900 dark:text-white shadow-sm' : 'text-brand-500 hover:text-brand-700 dark:text-gray-400'}`}>{cat}</button>
+                                ))}
+                            </div>
+                            <div className="flex items-center gap-3 w-full md:w-auto">
+                                <button onClick={() => setViewMode('inStock')} className={`flex-grow md:flex-none px-4 py-2 text-xs font-bold rounded-xl transition-all ${viewMode === 'inStock' ? 'bg-brand-900 text-white shadow-lg' : 'bg-brand-100 text-brand-500 dark:bg-brand-800 dark:text-gray-400'}`}>Active Stock</button>
+                                <button onClick={() => setViewMode('outOfStock')} className={`flex-grow md:flex-none px-4 py-2 text-xs font-bold rounded-xl transition-all ${viewMode === 'outOfStock' ? 'bg-brand-900 text-white shadow-lg' : 'bg-brand-100 text-brand-500 dark:bg-brand-800 dark:text-gray-400'}`}>Out of Stock</button>
+                                <button onClick={() => triggerCsvDownload(processedItems)} className="p-2.5 bg-emerald-500 text-white rounded-xl shadow-lg hover:opacity-90 transition-all"><svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg></button>
+                            </div>
+                        </div>
+                        {loading ? (
+                            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 lg:gap-6">
+                                {[...Array(8)].map((_, i) => <div key={i} className="h-64 glass rounded-[2rem] shimmer-bg"></div>)}
+                            </div>
+                        ) : paginatedItems.length > 0 ? (
+                            <>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 lg:gap-6">
+                                    {paginatedItems.map((item, idx) => <ItemCard key={item.id} item={item} onCardClick={() => setSelectedItem(item)} style={{ animationDelay: `${idx * 40}ms` }} />)}
+                                </div>
+                                <PaginationControls currentPage={currentPage} onPageChange={(_, p) => setCurrentPage(p)} lastFetchCount={paginatedItems.length} itemsPerPage={ITEMS_PER_PAGE} />
+                            </>
+                        ) : (
+                             <div className="text-center py-20 glass rounded-[2.5rem] border-2 border-dashed border-brand-200 dark:border-brand-800">
+                                  <p className="text-brand-500 font-bold uppercase tracking-widest text-xs">No Inventory Found</p>
+                             </div>
+                        )}
+                        {selectedItem && <ItemModal item={selectedItem} onClose={() => setSelectedItem(null)} />}
+                    </div>
+                </div>
+            );
+        }
+
+        function FilterSidePanel({ brands, isLoading, activeFilters, onFilterChange }) {
+            const [brandSearch, setBrandSearch] = useState('');
+            const tagFilters = [{ l: 'Special Price', v: 'Special Pricing' }, { l: 'New Arrival', v: 'New Arrival' }, { l: 'Best Seller', v: 'Best Seller' }, { l: 'Promo', v: 'Holiday Promo' }];
+            const sortedBrands = useMemo(() => (brandSearch ? brands.filter(b => b.toLowerCase().includes(brandSearch.toLowerCase())) : brands).sort((a,b) => a.localeCompare(b)), [brandSearch, brands]);
+            return (
+                <div className="glass p-6 rounded-[2.5rem] shadow-xl space-y-6 sticky top-28 h-[calc(100vh-10rem)] flex flex-col border-white/40">
+                    <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-brand-orange mb-4">Package Tags</p>
+                        <div className="flex flex-wrap gap-2">
+                            {tagFilters.map(tag => (
+                                <button key={tag.v} onClick={() => onFilterChange({ tags: {...activeFilters.tags, [tag.v]: !activeFilters.tags[tag.v]} })} className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-tighter transition-all border ${activeFilters.tags[tag.v] ? 'bg-brand-900 border-brand-900 text-white shadow-md' : 'border-brand-200 text-brand-500 hover:border-brand-orange dark:text-gray-400 dark:border-gray-700'}`}>{tag.l}</button>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="flex-grow flex flex-col min-h-0 border-t border-brand-100 dark:border-brand-800 pt-6">
+                        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-brand-orange mb-4">Brand List</p>
+                        <input type="text" value={brandSearch} onChange={e => setBrandSearch(e.target.value)} placeholder="Filter brands..." className="w-full p-3 mb-3 rounded-xl bg-brand-50 dark:bg-brand-900/50 border border-brand-100 dark:border-brand-700 text-xs outline-none focus:ring-1 focus:ring-brand-orange/50 dark:text-white" />
+                        <div className="flex-grow overflow-y-auto space-y-0.5 pr-2 filter-scrollbar">
+                            <button onClick={() => onFilterChange({ brand: 'All Brands' })} className={`w-full text-left px-3 py-2 rounded-lg text-[11px] font-bold transition-all ${activeFilters.brand === 'All Brands' ? 'bg-brand-900 text-white' : 'text-brand-500 hover:bg-brand-100 dark:text-gray-400 dark:hover:bg-brand-800'}`}>All Brands</button>
+                            {sortedBrands.map(b => (
+                                <button key={b} onClick={() => onFilterChange({ brand: b })} className={`w-full text-left px-3 py-2 rounded-lg text-[11px] font-bold transition-all truncate ${activeFilters.brand === b ? 'bg-brand-900 text-white shadow-md' : 'text-brand-500 hover:bg-brand-100 dark:text-gray-400 dark:hover:bg-brand-800'}`}>{b}</button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+        
+        function SearchControls({ onSearch, onBulkSearch, onBrowseAll, sortBy, setSortBy, sortDirection, onSortDirectionChange }) {
+            const [term, setTerm] = useState('');
+            const [type, setType] = useState('upc');
+            const [bulk, setBulk] = useState('');
+            const [showBulk, setShowBulk] = useState(false);
+            const handleSearch = () => term.trim() && onSearch(term.trim(), type);
+            const handleBulk = () => {
+                const list = bulk.split(/[\n,]/).map(x => x.trim()).filter(x => x);
+                list.length && onBulkSearch(list);
+            };
+            return (
+                <div className="glass p-3 rounded-2xl shadow-lg border-white/30 mb-6 transition-all">
+                    <div className="flex flex-wrap gap-2 items-center">
+                        <div className="flex bg-brand-50 dark:bg-brand-900 p-1 rounded-xl flex-grow md:flex-grow-0 border border-brand-100 dark:border-brand-800">
+                             <select value={type} onChange={e => setType(e.target.value)} className="bg-transparent text-[10px] font-black uppercase tracking-widest text-brand-orange px-2 outline-none cursor-pointer">
+                                <option value="upc">UPC</option>
+                                <option value="itemName_lowercase">Name</option>
+                                <option value="sku">SKU</option>
+                             </select>
+                             <input type="text" value={term} onChange={e => setTerm(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleSearch()} placeholder="Search catalog..." className="bg-transparent px-3 py-2 text-sm outline-none flex-grow min-w-[120px] dark:text-white" />
+                        </div>
+                        <div className="flex bg-brand-50 dark:bg-brand-900 p-1 rounded-xl border border-brand-100 dark:border-brand-800">
+                             <select value={sortBy} onChange={setSortBy} className="bg-transparent text-[10px] font-bold text-brand-500 dark:text-gray-400 px-2 outline-none cursor-pointer">
+                                <option value="brand">Brand</option>
+                                <option value="askingPrice">Price</option>
+                                <option value="availableInventory">Stock</option>
+                             </select>
+                             <button onClick={onSortDirectionChange} className="p-2 text-brand-orange hover:opacity-70 transition-opacity">
+                                 {sortDirection === 'asc' ? <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path d="M5 15l7-7 7 7" /></svg> : <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path d="M19 9l-7 7-7-7" /></svg>}
+                             </button>
+                        </div>
+                        <div className="flex gap-2 ml-auto">
+                            <button onClick={handleSearch} className="px-5 py-2.5 bg-brand-900 text-white text-xs font-black uppercase tracking-widest rounded-xl hover:shadow-lg transition-all">Find</button>
+                            <button onClick={() => {setTerm(''); setBulk(''); onBrowseAll();}} className="p-2.5 border border-brand-200 dark:border-gray-700 rounded-xl text-brand-400 hover:text-brand-900 dark:hover:text-white transition-all"><svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path d="M6 18L18 6M6 6l12 12" /></svg></button>
+                            <button onClick={() => setShowBulk(!showBulk)} className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${showBulk ? 'bg-brand-orange text-white' : 'bg-brand-50 text-brand-500 dark:bg-brand-900 dark:text-gray-400'}`}>Bulk</button>
+                        </div>
+                    </div>
+                    {showBulk && (
+                        <div className="mt-3 pt-3 border-t border-brand-100 dark:border-brand-800 animate-in fade-in slide-in-from-top-2">
+                             <div className="flex gap-2">
+                                <textarea rows="1" value={bulk} onChange={e => setBulk(e.target.value)} className="flex-grow p-3 rounded-xl bg-brand-50 dark:bg-brand-800 text-[11px] outline-none resize-none dark:text-white" placeholder="Paste multiple UPCs separated by comma or newline..."></textarea>
+                                <button onClick={handleBulk} className="px-6 bg-brand-orange text-white text-[10px] font-black uppercase tracking-widest rounded-xl shadow-sm hover:opacity-90">Verify</button>
+                             </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        function ItemCard({ item, onCardClick, style }) {
+            const priceText = item.askingPrice ? '$' + Number(item.askingPrice).toFixed(2) : 'TBD';
+            const placeholder = 'https://i.imgur.com/IUBzxFv.jpeg';
+            return (
+                <div onClick={onCardClick} className="result-card card-hover glass rounded-[2rem] p-4 flex flex-col cursor-pointer group shadow-sm border-white/50" style={style}>
+                    <div className="relative aspect-square rounded-2xl overflow-hidden bg-white flex items-center justify-center p-4">
+                        <div className="absolute top-2 left-2 flex flex-col gap-1 z-10">
+                          {Array.isArray(item.specialTag) && item.specialTag.slice(0, 1).map(t => (
+                            <span key={t} className={`${tagColorMap[t] || 'bg-brand-500'} text-[8px] font-black uppercase px-2 py-0.5 rounded-full shadow-sm`}>{t}</span>
+                          ))}
+                        </div>
+                        <img loading="lazy" src={item.imageUrl || placeholder} className="max-w-full max-h-full object-contain group-hover:scale-105 transition-all duration-500" onError={e => e.target.src=placeholder} />
+                    </div>
+                    <div className="mt-4 space-y-1 px-1">
+                        <p className="text-[9px] font-black text-brand-orange uppercase tracking-[0.2em] truncate">{item.brand || 'Official Selection'}</p>
+                        <h3 className="text-xs font-bold text-brand-900 dark:text-white line-clamp-2 leading-snug h-8">{item.itemName}</h3>
+                        <div className="pt-3 flex items-end justify-between">
+                            <span className="text-sm font-black text-brand-900 dark:text-brand-orange">{priceText}</span>
+                            <span className={`text-[9px] font-black uppercase tracking-tighter ${item.availableInventory > 10 ? 'text-emerald-500' : 'text-rose-500'}`}>{item.availableInventory || 0} units</span>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+        
+        function PaginationControls({ currentPage, onPageChange, lastFetchCount, itemsPerPage }) {
+            return (
+                <div className="mt-12 flex justify-center items-center gap-4">
+                    <button onClick={() => onPageChange('prev', currentPage-1)} disabled={currentPage === 1} className="w-10 h-10 rounded-xl glass flex items-center justify-center text-brand-900 dark:text-white disabled:opacity-20 hover:scale-110 transition-all shadow-md">&larr;</button>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-brand-500 dark:text-gray-400">Page {currentPage}</span>
+                    <button onClick={() => onPageChange('next', currentPage+1)} disabled={lastFetchCount < itemsPerPage} className="w-10 h-10 rounded-xl glass flex items-center justify-center text-brand-900 dark:text-white disabled:opacity-20 hover:scale-110 transition-all shadow-md">&rarr;</button>
+                </div>
+            );
+        }
+
+        function ItemModal({ item, onClose }) {
+            const [enlarge, setEnlarge] = useState(false);
+            const imageUrl = item.imageUrl || 'https://i.imgur.com/IUBzxFv.jpeg';
+            const msrpValue = Number(item.msrp);
+            const hasMsrp = msrpValue && msrpValue > 0;
+            return (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-brand-900/60 backdrop-blur-md">
+                    <div className="bg-white dark:bg-brand-900 w-full max-w-5xl rounded-[3rem] shadow-2xl overflow-hidden relative border border-white/10">
+                        <button onClick={onClose} className="absolute top-6 right-6 p-2 rounded-full hover:bg-brand-100 dark:hover:bg-brand-800 text-brand-500 transition-colors z-20">
+                            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                        <div className="flex flex-col lg:flex-row h-full max-h-[85vh] overflow-y-auto">
+                            <div className="lg:w-1/2 p-12 bg-white flex items-center justify-center">
+                                <img src={imageUrl} className="max-w-full max-h-full object-contain hover:scale-105 cursor-zoom-in transition-all" onClick={() => setEnlarge(true)} />
+                            </div>
+                            <div className="lg:w-1/2 p-12 lg:border-l border-brand-100 dark:border-brand-800 dark:text-white space-y-8">
+                                <div className="space-y-2">
+                                    <div className="flex gap-2">
+                                        {Array.isArray(item.specialTag) && item.specialTag.map(t => <span key={t} className={`${tagColorMap[t] || 'bg-brand-500'} text-[10px] font-black uppercase px-3 py-1 rounded-full shadow-sm`}>{t}</span>)}
+                                    </div>
+                                    <h2 className="text-3xl font-black text-brand-900 dark:text-white leading-tight">{item.itemName}</h2>
+                                    <p className="text-brand-orange text-lg font-bold tracking-widest uppercase">{item.brand || 'Official Selection'}</p>
+                                </div>
+                                <div className={`grid ${hasMsrp ? 'grid-cols-2' : 'grid-cols-1'} gap-6 p-8 rounded-3xl bg-brand-50 dark:bg-brand-800/50`}>
+                                    <div>
+                                        <p className="text-[10px] font-bold text-brand-400 uppercase tracking-widest mb-1">Partner Price</p>
+                                        <p className="text-4xl font-black text-emerald-500">${Number(item.askingPrice).toFixed(2)}</p>
+                                    </div>
+                                    {hasMsrp && (
+                                        <div>
+                                            <p className="text-[10px] font-bold text-brand-400 uppercase tracking-widest mb-1">Retail MSRP</p>
+                                            <p className="text-2xl font-bold text-brand-400 line-through">${msrpValue.toFixed(2)}</p>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="grid grid-cols-2 gap-x-4 gap-y-6 text-[11px] border-t border-brand-100 dark:border-brand-800 pt-8">
+                                    <div className="space-y-1"><p className="text-brand-400 uppercase font-black tracking-tighter">SKU Reference</p><p className="font-bold font-mono">{item.sku}</p></div>
+                                    <div className="space-y-1"><p className="text-brand-400 uppercase font-black tracking-tighter">GTIN / UPC</p><p className="font-bold font-mono">{item.upc}</p></div>
+                                    <div className="space-y-1"><p className="text-brand-400 uppercase font-black tracking-tighter">Product Spec</p><p className="font-bold">{item.size || 'Standard'}</p></div>
+                                    <div className="space-y-1"><p className="text-brand-400 uppercase font-black tracking-tighter">Gender</p><p className="font-bold">{item.gender || 'Universal'}</p></div>
+                                    <div className="space-y-1"><p className="text-brand-400 uppercase font-black tracking-tighter">Type</p><p className="font-bold">{item.type || item.subCategory || 'General'}</p></div>
+                                    <div className="space-y-1"><p className="text-brand-400 uppercase font-black tracking-tighter">Availability</p><p className={`font-bold ${item.availableInventory > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{item.availableInventory} Units Ready</p></div>
+                                </div>
+                                {item.description && (
+                                    <div className="space-y-2 border-t border-brand-100 dark:border-brand-800 pt-6">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">Detailed Description</p>
+                                        <p className="text-xs text-brand-600 dark:text-brand-300 leading-relaxed italic">{item.description}</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                    {enlarge && <div className="fixed inset-0 z-[70] bg-black/95 flex items-center justify-center p-4 cursor-zoom-out" onClick={() => setEnlarge(false)}><img src={imageUrl} className="max-w-[95vw] max-h-[95vh] object-contain" /></div>}
+                </div>
+            );
+        }
+
+        function ApiDocs() {
+            const URL = "https://api.svelte-wholesale.dev/v1";
+            return (
+                <div className="glass p-10 rounded-[2.5rem] shadow-xl space-y-12 border-white/20 dark:text-brand-300">
+                    <div className="space-y-4">
+                        <p className="text-[10px] font-black uppercase tracking-[0.4em] text-brand-orange">Integration Hub</p>
+                        <h2 className="text-4xl font-black text-brand-900 dark:text-white tracking-tight">API Documentation</h2>
+                        <p className="max-w-3xl text-sm leading-relaxed text-brand-600 dark:text-brand-400">Programmatic synchronization. High-availability secured endpoints for ERP integration.</p>
+                    </div>
+                    <div className="grid lg:grid-cols-2 gap-12">
+                        <div className="space-y-10">
+                            <section className="space-y-4">
+                                <h3 className="text-sm font-black uppercase tracking-widest text-brand-900 dark:text-white border-b-2 border-brand-orange w-max pb-1">Authentication</h3>
+                                <p className="text-xs">Secure Bearer token authorization required for all endpoints.</p>
+                                <div className="bg-brand-900 p-5 rounded-2xl shadow-inner border border-white/5"><code className="text-brand-orange font-mono text-xs">Authorization: Bearer [ACCESS_TOKEN]</code></div>
+                            </section>
+                            <section className="space-y-4">
+                                <h3 className="text-sm font-black uppercase tracking-widest text-brand-900 dark:text-white border-b-2 border-brand-orange w-max pb-1">Endpoints & Parameters</h3>
+                                <div className="space-y-4">
+                                    <div className="flex items-center gap-4 bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-xl"><span className="px-2 py-0.5 bg-emerald-500 text-white text-[9px] font-black rounded uppercase">GET</span><code className="text-emerald-600 dark:text-emerald-400 font-bold text-xs">{URL}/</code></div>
+                                    <div className="overflow-hidden rounded-xl border border-brand-100 dark:border-brand-800">
+                                        <table className="w-full text-left text-[11px]"><thead className="bg-brand-50 dark:bg-brand-800/50"><tr><th className="p-3 font-black uppercase">Parameter</th><th className="p-3 font-black uppercase">Description</th></tr></thead>
+                                            <tbody className="divide-y divide-brand-100 dark:divide-brand-800">
+                                                <tr><td className="p-3 font-mono text-brand-orange">page</td><td className="p-3">Current offset (def: 1)</td></tr>
+                                                <tr><td className="p-3 font-mono text-brand-orange">limit</td><td className="p-3">Results per batch (max: 250)</td></tr>
+                                                <tr><td className="p-3 font-mono text-brand-orange">sku/upc</td><td className="p-3">Direct resource filtering</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </section>
+                            <section className="space-y-4">
+                                <h3 className="text-sm font-black uppercase tracking-widest text-brand-900 dark:text-white border-b-2 border-brand-orange w-max pb-1">Rate Limits</h3>
+                                <div className="p-5 rounded-xl bg-brand-50 dark:bg-brand-800/30 border border-brand-100 dark:border-brand-800"><p className="text-xs">You may call this endpoint up to 300 times per 24-hour period per token. Additional requests will receive a `429 Too Many Requests` error.</p></div>
+                            </section>
+                        </div>
+                        <div className="space-y-8">
+                             <section className="space-y-4"><h3 className="text-sm font-black uppercase tracking-widest text-brand-900 dark:text-white border-b-2 border-brand-orange w-max pb-1">Response Format</h3><div className="rounded-2xl bg-brand-900 overflow-hidden border border-white/5 shadow-xl"><div className="bg-white/5 px-4 py-2 border-b border-white/5 flex justify-between"><span className="text-[10px] font-bold text-brand-300 uppercase">application/json</span></div><pre className="p-5 text-[11px] font-mono text-brand-300 overflow-x-auto leading-relaxed">
+{`{
+  "meta": {
+    "total": 1287,
+    "current_page": 1,
+    "total_pages": 6,
+    "rate_limit_remaining": 299
+  },
+  "data": [
+    {
+      "sku": "SV-FR-1029",
+      "upc": "012345678901",
+      "itemName": "Collection Fragrance",
+      "brand": "Svelte Design",
+      "size": "100ml",
+      "asin": "B08X44T43G",
+      "msrp": 95.00,
+      "category": "Fragrance",
+      "availableInventory": 150,
+      "askingPrice": 75.99
+    }
+  ]
+}`}</pre></div></section>
+                            <section className="space-y-4"><h3 className="text-sm font-black uppercase tracking-widest text-brand-900 dark:text-white border-b-2 border-brand-orange w-max pb-1">Example cURL</h3><div className="rounded-2xl bg-brand-900 overflow-hidden border border-white/5 shadow-xl"><pre className="p-5 text-[11px] font-mono text-brand-orange leading-relaxed whitespace-pre-wrap">
+{`curl -X GET "${URL}/?page=1&limit=50" \\
+     -H "Authorization: Bearer YOUR_TOKEN"`}</pre></div></section>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function ApiKeyManager({ user }) {
+            const [apiKey, setApiKey] = useState(null);
+            const [loading, setLoading] = useState(true);
+            const [showKey, setShowKey] = useState(false);
+            const [usage, setUsage] = useState({ count: 0, limit: 300 });
+            const [logs, setLogs] = useState([]);
+            const [copySuccess, setCopySuccess] = useState(false);
+
+            useEffect(() => {
+                const fetchKeyData = async () => {
+                    try {
+                        const doc = await db.collection('users').doc(user.uid).get();
+                        if (doc.exists && doc.data().apiKey) {
+                            const currentKey = doc.data().apiKey;
+                            setApiKey(currentKey);
+                            
+                            // Fetch ALL logs for user (Simple query, filter in memory)
+                            const logsSnap = await db.collection('apiLogs').where('userId', '==', user.uid).get();
+                            const allLogs = logsSnap.docs.map(d => d.data());
+
+                            // 1. Calculate Daily Consumption (Last 24 Hours)
+                            const now = new Date();
+                            const twentyFourHoursAgo = new Date(now.getTime() - (24 * 60 * 60 * 1000));
+                            
+                            const dailyLogs = allLogs.filter(l => {
+                                // Handle Firestore Timestamp, Seconds object, or Date string
+                                const ts = l.timestamp?.toDate ? l.timestamp.toDate() : new Date(l.timestamp?.seconds * 1000 || l.timestamp);
+                                return ts > twentyFourHoursAgo;
+                            });
+                            setUsage({ count: dailyLogs.length, limit: 300 });
+
+                            // 2. Sort for Recent Activity (Desc, Top 10)
+                            const sortedLogs = allLogs.sort((a, b) => {
+                                const tA = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(a.timestamp?.seconds * 1000 || a.timestamp);
+                                const tB = b.timestamp?.toDate ? b.timestamp.toDate() : new Date(b.timestamp?.seconds * 1000 || b.timestamp);
+                                return tB - tA;
+                            }).slice(0, 10);
+                            
+                            setLogs(sortedLogs);
+                        }
+                    } catch(e) { console.error(e); } finally { setLoading(false); }
+                };
+                fetchKeyData();
+            }, [user]);
+
+            const copyToClipboard = () => {
+                const el = document.createElement('textarea');
+                el.value = apiKey;
+                document.body.appendChild(el);
+                el.select();
+                document.execCommand('copy');
+                document.body.removeChild(el);
+                setCopySuccess(true);
+                setTimeout(() => setCopySuccess(false), 2000);
+            };
+
+            const generate = async () => {
+                if (!window.confirm("Warning: Revoking the current token will immediately disconnect active partner integrations. Proceed?")) return;
+                setLoading(true);
+                const key = 'sv_live_' + Math.random().toString(36).substr(2, 32);
+                try {
+                    await db.collection('users').doc(user.uid).set({ apiKey: key }, { merge: true });
+                    await db.collection('apiKeys').doc(key).set({ userId: user.uid, createdAt: new Date() });
+                    setApiKey(key);
+                    setShowKey(true);
+                } finally { setLoading(false); }
+            };
+
+            if (loading) return <div className="flex justify-center py-20"><div className="loader"></div></div>;
+
+            return (
+                <div className="glass p-10 rounded-[2.5rem] shadow-xl border-white/20 dark:text-brand-300 max-w-4xl mx-auto">
+                    <div className="space-y-3 mb-10 text-center">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/1/1b/Svelte_Logo.svg" alt="Svelte" className="h-16 w-16 mx-auto mb-4" />
+                        <p className="text-[10px] font-black uppercase tracking-[0.4em] text-brand-orange">Access Management</p>
+                        <h2 className="text-3xl font-black text-brand-900 dark:text-white tracking-tight">Maintainer Credentials</h2>
+                    </div>
+
+                    <div className="space-y-10">
+                        {apiKey ? (
+                            <div className="space-y-8">
+                                <div className="space-y-3">
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-brand-500">Live API Production Token</label>
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex-grow p-5 bg-brand-900 dark:bg-brand-800 rounded-[1.5rem] font-mono text-brand-orange text-sm overflow-hidden whitespace-nowrap border border-white/5 shadow-inner">
+                                            {showKey ? apiKey : '••••••••••••••••••••••••••••••••'}
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button onClick={() => setShowKey(!showKey)} className="p-5 rounded-[1.5rem] border border-brand-200 hover:bg-brand-50 transition-all shadow-sm">
+                                                {showKey ? <EyeOffIcon /> : <EyeIcon />}
+                                            </button>
+                                            <button onClick={copyToClipboard} className="p-5 rounded-[1.5rem] border border-brand-200 hover:bg-brand-50 transition-all shadow-sm relative">
+                                                <CopyIcon />
+                                                {copySuccess && <span className="absolute -top-10 left-1/2 -translate-x-1/2 px-3 py-1 bg-brand-900 text-white text-[10px] font-black rounded-lg shadow-xl">Copied!</span>}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="p-8 bg-brand-50 dark:bg-brand-800/30 rounded-[2rem] border border-brand-100 dark:border-brand-700">
+                                    <div className="flex justify-between items-center mb-4">
+                                        <h4 className="text-[10px] font-black uppercase tracking-widest text-brand-900 dark:text-white">Daily Consumption Quota</h4>
+                                        <span className="text-[10px] font-black text-brand-orange">{usage.count} / {usage.limit} Calls</span>
+                                    </div>
+                                    <div className="h-2 bg-brand-200 dark:bg-brand-900 rounded-full overflow-hidden">
+                                        <div className="h-full bg-brand-orange transition-all duration-700" style={{ width: `${(usage.count / usage.limit) * 100}%` }}></div>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-4">
+                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-brand-500">Recent API Access Activity</h4>
+                                    <div className="rounded-2xl border border-brand-100 dark:border-brand-800 overflow-hidden shadow-sm">
+                                        <table className="w-full text-[11px] text-left"><thead className="bg-brand-50 dark:bg-brand-800/50"><tr><th className="p-3 font-black uppercase">Timestamp</th><th className="p-3 font-black uppercase">Operation</th></tr></thead>
+                                            <tbody className="divide-y divide-brand-100 dark:divide-brand-800">
+                                                {logs.length ? logs.map((l, i) => (
+                                                    <tr key={i}><td className="p-3 font-mono">{new Date(l.timestamp?.seconds * 1000 || l.timestamp).toLocaleString()}</td><td className="p-3">Synchronize Manifest Resource</td></tr>
+                                                )) : <tr><td colSpan="2" className="p-6 text-center text-brand-400 uppercase text-[9px] font-bold">No telemetry identified for the current token</td></tr>}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="p-16 border-2 border-dashed border-brand-200 dark:border-brand-800 rounded-[2.5rem] text-center bg-brand-50 dark:bg-brand-900/10">
+                                <p className="text-brand-500 text-xs font-bold uppercase tracking-widest">No production tokens generated for this profile</p>
+                            </div>
+                        )}
+                        <div className="text-center space-y-6 pt-4">
+                            <button onClick={generate} className="px-10 py-5 rounded-[1.5rem] bg-brand-900 dark:bg-brand-orange text-white dark:text-white font-black uppercase tracking-widest text-xs hover:shadow-2xl transition-all">
+                                {apiKey ? 'Revoke and Generate New Key' : 'Initialize Partner API Key'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
